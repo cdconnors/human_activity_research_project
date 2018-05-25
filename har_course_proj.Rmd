@@ -1,0 +1,70 @@
+---
+title: "Human Activity Research: Dumbbell Exercise Course Project"
+author: "Casey Connors"
+date: "May 25, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Introduction
+
+The goal of this project is to predict the manner in which test subjects performed 
+a dumbbell exercise, the Unilateral Dumbbell Biceps Curl, using a set of data generated 
+by accelerometers worn on the belt, forearm, arm, and dumbell of 6 participants. The 
+data is tested on a set of 20 test cases from the same 6 participants.
+
+Each participant performed 10 repetitions in five different ways.
+
+- Class A: Exactly according to the specification of the exercise.
+- Class B: Throwing the elbows to the front.
+- Class C: Lifting the dumbbell only halfway.
+- Class D: Lowering the dumbbell only halfway.
+- Class E: Throwing the hips to the front.
+
+
+#Data Exploration
+
+```{r echo=TRUE}
+library(caret)
+
+training <- read.csv("data/pml-training.csv")
+testing <- read.csv("data/pml-testing.csv")
+
+str(training)
+
+str(training$classe)
+
+
+
+```
+
+
+#Regression Prediction Model
+
+```{r, echo=TRUE}
+cvCtrlTime <- trainControl(method = "timeslice", initialWindow = 10, horizon = 1, fixedWindow = FALSE) #Will conduct time slice cross-validation on the next sample, growing the sample from an initial size of 10, always starting and 1.
+
+cvCtrlKfold <- trainControl(method = "repeatedcv", repeats = 3) #will conduct a 10-fold repeated cross-validation three times.
+
+
+#train the model
+
+
+#test the model - predict then look at confusion matrix.
+
+
+```
+
+#KNN Model
+
+
+#SVM model
+
+
+#Random Forest Prediction Model
+
+
+#Results and Conclusion
