@@ -27,44 +27,216 @@ Each participant performed 10 repetitions in five different ways.
 
 #Data Exploration
 
+##Read in the data and look at the variable types
+
+Read the data into a data variable and a validation variable.  The data variable contains the 
+raw data used for training a prediction model.  The validation variable contains the twenty 
+observations that will later be used to test the chosen prediction model on for submission to the 
+course site.
+
 ```{r echo=TRUE}
 library(caret)
 
-training <- read.csv("data/pml-training.csv")
-testing <- read.csv("data/pml-testing.csv")
+data <- read.csv("data/pml-training.csv")#, stringsAsFactors = FALSE)
+validation <- read.csv("data/pml-testing.csv")#, stringsAsFactors = FALSE)
 
-str(training)
+#Take a look at all the variables and types
+#str(data)
 
-str(training$classe)
+dim(data)
 
+#Take a look at the response variable
+str(data$classe)
+
+```
+
+
+## Data cleaning
+
+The data contain quite a few factors that are sparse, mostly missing data, or have very
+little impact on the response.  All factors removed from the training set are also removed from
+validation set.
+
+First, we remove variables that have near zero variance.
+
+```{r, echo=TRUE}
+#Look at near zero variable calculation output
+nzVar <- nearZeroVar(data, saveMetrics = TRUE)
+#nzVar
+
+#Get columns of near zero variance variables
+nzvCols <- nearZeroVar(data)
+
+#Reomove near zero variance columns from data and validation set
+if(length(nzvCols) > 0) dataRed <- data[, -nzvCols]
+if(length(nzvCols) > 0) validRed <- validation[,-nzvCols]
+
+dim(dataRed)
+dim(validRed)
+
+```
+
+
+Next, we remove variables that have mostly missing data, as these will be hard to impute
+reliable data into. 
+
+```{r, echo=TRUE}
+
+cutoff <- 0.95 #Percent of the variable that is missing - can change this to be less inclusive
+
+mostlyMiss <- sapply(dataRed, function(x) mean(is.na(x))) > cutoff #return a logical vector of variables that have a greater percentage of missing values than the cutoff
+
+#mostlyMiss
+
+#Remove columns from the data with a greater percentage of missing values than the cutoff - currently if greater then 95% missing
+dataRed <- dataRed[, mostlyMiss == FALSE]
+validRed <- validRed[, mostlyMiss == FALSE]
+
+dim(dataRed)
+dim(validRed)
+
+#Check if there are any columns with missing values after removing high amounts of missing
+
+percMiss <- sapply(dataRed, function(x) mean(is.na(x)))
+#percMiss
+
+#Remaining columns do not have any missing data - no need to use imputation
+
+# #Pre-process to impute missing data
+# preProcTrng <- preProcess(training, method = "knnImpute")
+# trngImputed <- predict(preProcTrng, training)
+
+
+```
+
+We also get rid of the X column.  This column is just an observation ID and does not add any
+information.
+
+```{r, echo=TRUE}
+dataRed <- dataRed[,-1]
+validRed <- validRed[,-1]
+
+
+```
+
+Finally, we check for covariate high correlations and decide whether to remove variables with high 
+correlations or to use Principle Components Analysis on the data.
+
+As is seen, there are quite a few variables with high correlations, so we remove them
+to help reduce the error in the model.
+
+
+```{r, echo=TRUE}
+
+#Find columns that are highly correlated and remove them.
+highCorrCols = findCorrelation(abs(cor(dataRed[,-c(1,4,58)])),0.90) #Columns 1, 4 are non-numeric factors - subject name and data, respectively.  Column 58 is the response.
+highCorrFeatures = names(dataRed)[highCorrCols]
+dataRed2 = dataRed[,-highCorrCols]
+outcome = which(names(dataRed2) == "classe")
+
+#remove high correlation columns from the validation set
+validRed2 = validRed[,-highCorrCols]
+
+```
+
+##Split training data into a training and test set
+
+Now we split the training data into a training and test set. This allows us to compare models 
+using different methods prior to selecting the final model.  We use the final model on the 
+20 observations stored in the validation data frame for submission as part of the project. We
+use 60% of the data for a training set and 40% for the test set.
+
+```{r, echo=TRUE}
+
+set.seed(3323)
+#Split the dataRed data frame as it matches the validation data set.
+inTrain <- createDataPartition(y = dataRed2$classe, p = 0.60, list=FALSE)
+training <- dataRed2[inTrain,]
+testing <- dataRed2[-inTrain,]
+dim(training)
 
 
 ```
 
 
-#Regression Prediction Model
+#Define cross-validation controls for training the model.
+
+After trying numerous controls, we settle on the simplest that provides solid cross-validation.  Perform 10-fold cross validation.
 
 ```{r, echo=TRUE}
-cvCtrlTime <- trainControl(method = "timeslice", initialWindow = 10, horizon = 1, fixedWindow = FALSE) #Will conduct time slice cross-validation on the next sample, growing the sample from an initial size of 10, always starting and 1.
-
-cvCtrlKfold <- trainControl(method = "repeatedcv", repeats = 3) #will conduct a 10-fold repeated cross-validation three times.
 
 
-#train the model
+#Cross-validation control to check to see if a model not using time slice cross-validation will give just as good results
 
-
-#test the model - predict then look at confusion matrix.
-
+cvCtrl10Fold <- trainControl(method = "cv", number = 10) #10 fold cross-validation repeated once.
 
 ```
 
 #KNN Model
 
+Train a K-nearest neighbors model for comparison.  
 
-#SVM model
+```{r, echo=TRUE, cache=TRUE}
+
+#method = 'knn'
+
+#train the model
+modKNN <- train(classe ~ ., data = training,
+                method = "knn",
+                trControl = cvCtrl10Fold)
+
+#test the model - predict then look at confusion matrix.
+
+cmknn <- confusionMatrix(predict(modKNN,testing),testing$classe)
+cmknn
+
+
+```
 
 
 #Random Forest Prediction Model
 
+```{r, echo=TRUE, cache=TRUE}
+#method = 'rf'
+
+#train the model
+modRf <- train(classe ~ ., data = training,
+                method = "rf",
+                trControl = cvCtrl10Fold)
+
+#test the model - predict then look at confusion matrix.
+
+
+cmrf <- confusionMatrix(predict(modRf,testing),testing$classe)
+cmrf
+
+```
 
 #Results and Conclusion
+
+The random forest model has a much higher accuracy.  So we use that model to predict on the 
+validation set for submission.
+
+```{r, echo=TRUE}
+answers <- predict(modRf, validRed2[,-51]) #Column 51 is the problem ID, we won't predict on that.
+
+answers <- data.frame(validRed2$problem_id, answers)
+
+answers
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
